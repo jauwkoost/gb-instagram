@@ -145,6 +145,7 @@ def build_background(size, stijl, foto=None, standaard="haven", focus=None, cont
     w, h = size
     bg = gradient(w, h)
     fx, fy = focus or (0.5, 0.4)
+    eigen_foto = foto is not None
 
     if foto is None and standaard == "golf":
         golf = asset("golf.png")
@@ -185,7 +186,10 @@ def build_background(size, stijl, foto=None, standaard="haven", focus=None, cont
         room = h - content_bottom + int(ph * 0.12)  # het vervaagde randje mag achter de tekst
         ph = min(ph, room)
         if ph < h * 0.24:
-            # te weinig ruimte (bijv. titelslide met stemtabel): standaard achtergrond
+            # Te weinig ruimte onderin (bijv. titelslide met stemtabel).
+            if eigen_foto:
+                # eigen foto dan over de hele slide, doorzichtig blauw getint
+                return build_background(size, "achtergrond", foto, standaard, focus)
             return build_background(size, stijl, None, standaard if standaard == "golf" else "leeg")
     p, fpos = focus_crop(foto, w, ph, fx, fy, 0.62)
     # Het vervaagde deel mag nooit over het focuspunt (de hoofden) heen lopen.
