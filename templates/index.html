@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gemeentebelangen – Instagram maken</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='stijl.css') }}">
+</head>
+<body>
+<header>
+  <img src="{{ url_for('static', filename='logo.png') }}" alt="Gemeentebelangen">
+  <span>Instagram-generator</span>
+</header>
+
+<main>
+<form action="{{ url_for('maak') }}" method="post" enctype="multipart/form-data" id="form">
+  <input type="hidden" name="vorige_id" value="{{ vorige._id or '' }}">
+
+  <section class="kaart">
+    <h2>1. Soort post</h2>
+    <div class="soorten">
+      {% for key, s in cfg.soorten.items() %}
+      <label class="soort">
+        <input type="radio" name="soort" value="{{ key }}"
+          {% if (vorige.soort or 'motie') == key %}checked{% endif %}>
+        <span>{{ s.naam }}</span>
+      </label>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="kaart">
+    <h2>2. Titelslide</h2>
+    <div class="rij">
+      <label class="smal">Label (schuin, boven de titel)
+        <input name="label" id="label" value="{{ vorige.label or '' }}">
+      </label>
+      <label>Titel *
+        <input name="titel" required value="{{ vorige.titel or '' }}" placeholder="Bijv. Lokale expertise benutten bij vervanging havenkades">
+      </label>
+    </div>
+    <label>Ondertitel <small>(optioneel, korte zin onder de titel)</small>
+      <input name="ondertitel" value="{{ vorige.ondertitel or '' }}">
+    </label>
+  </section>
+
+  <section class="kaart" id="stemming">
+    <h2>3. Stemming</h2>
+    <label class="smal">Uitslag
+      <select name="uitslag" id="uitslag">
+        {% for u in cfg.uitslagen %}
+        <option {% if vorige.uitslag == u %}selected{% endif %}>{{ u }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <table class="partijen">
+      <thead><tr><th>Partij</th><th>Zetels</th><th>Voor</th><th>Tegen</th><th>Niet</th></tr></thead>
+      <tbody>
+      {% set vs = vorige.stemming or {} %}
+      {% set rijen = cfg.partijen + [{'naam': '', 'zetels': ''}, {'naam': '', 'zetels': ''}] %}
+      {% for p in rijen %}
+        {% set i = loop.index0 %}
+        {% set ns = namespace(stem='', zetels=p.zetels) %}
+        {% for v in vs.voor or [] %}{% if v.naam == p.naam %}{% set ns.stem = 'voor' %}{% set ns.zetels = v.zetels %}{% endif %}{% endfor %}
+        {% for v in vs.tegen or [] %}{% if v.naam == p.naam %}{% set ns.stem = 'tegen' %}{% set ns.zetels = v.zetels %}{% endif %}{% endfor %}
+        <tr>
+          <td><input name="partij_naam" value="{{ p.naam }}" placeholder="Extra partij">
+              <input type="hidden" name="partij_stem" value="{{ ns.stem or 'niet' }}" class="stemwaarde"></td>
+          <td><input name="partij_zetels" type="number" min="0" max="45" value="{{ ns.zetels }}" class="zetels"></td>
+          <td><input type="radio" name="r{{ i }}" value="voor" {% if ns.stem == 'voor' %}checked{% endif %}></td>
+          <td><input type="radio" name="r{{ i }}" value="tegen" {% if ns.stem == 'tegen' %}checked{% endif %}></td>
+          <td><input type="radio" name="r{{ i }}" value="niet" {% if not ns.stem %}checked{% endif %}></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="totaal" id="totaal"></p>
+  </section>
+
+  <section class="kaart">
+    <h2><span id="nr-tekst">4</span>. Tekst</h2>
+    <label>Kop boven de tekst
+      <textarea name="kop" id="kop" rows="2">{{ vorige.kop or '' }}</textarea>
+    </label>
+    <label>Tekst
+      <textarea name="tekst" rows="10" placeholder="Typ of plak hier de toelichting.">{{ vorige.tekst or '' }}</textarea>
+    </label>
+    <details class="uitleg">
+      <summary>Opmaaktips</summary>
+      <ul>
+        <li>Lege regel = nieuwe alinea. Te lange tekst loopt vanzelf door naar de volgende slide.</li>
+        <li><code>## Kopje</code> = nieuwe slide met dat kopje (handig bij algemene beschouwingen).</li>
+        <li><code>---</code> = forceer een nieuwe slide.</li>
+        <li><code>- punt</code> = opsomming met •</li>
+        <li><code>**zo**</code> = <b>vet</b></li>
+      </ul>
+    </details>
+    <div class="rij">
+      <label class="smal">Kop boven de lijst
+        <input name="lijst_kop" id="lijst_kop" value="{{ vorige.lijst_kop or '' }}">
+      </label>
+      <div class="hint">Bij een motie zonder toelichting komen de punten direct onder de kop.</div>
+    </div>
+    <label><span id="lijst-naam">Genummerde punten</span> <small>(één per regel – wordt automatisch genummerd)</small>
+      <textarea name="lijst" rows="7">{{ vorige.lijst or '' }}</textarea>
+    </label>
+    <label>Slotslide <small>(optioneel; gebruik **vet** voor het standpunt)</small>
+      <textarea name="slot" id="slot" rows="4">{{ vorige.slot or '' }}</textarea>
+    </label>
+  </section>
+
+  <section class="kaart">
+    <h2><span id="nr-foto">5</span>. Afbeelding</h2>
+    <div class="rij">
+      <label>Foto <small>(JPG/PNG; leeg laten = standaard achtergrond)</small>
+        <input type="file" name="afbeelding" accept="image/*" id="afbeelding">
+      </label>
+      <label class="smal">Plaatsing
+        <select name="foto_stijl" id="foto_stijl">
+          <option value="">Standaard voor deze soort</option>
+          <option value="onder" {% if vorige.foto_stijl == 'onder' %}selected{% endif %}>Onderin, vervaagd (zoals vragen)</option>
+          <option value="achtergrond" {% if vorige.foto_stijl == 'achtergrond' %}selected{% endif %}>Hele achtergrond, blauw (zoals beschouwingen)</option>
+        </select>
+      </label>
+    </div>
+    {% if vorige._heeft_foto %}
+    <label class="check"><input type="checkbox" name="foto_behouden" value="1" checked id="behouden">
+      Foto van de vorige versie gebruiken (als je geen nieuwe kiest)</label>
+    {% endif %}
+    <input type="hidden" name="focus_x" id="focus_x" value="{{ vorige.focus_x or '' }}">
+    <input type="hidden" name="focus_y" id="focus_y" value="{{ vorige.focus_y or '' }}">
+    <div id="focus-blok" class="focus-blok" hidden>
+      <p><b>Klik op de foto waar de hoofden (of het belangrijkste deel) zitten.</b>
+        Dat deel blijft altijd goed zichtbaar en komt niet achter tekst of het blauwe vlak.</p>
+      <div class="focus-foto">
+        <img id="focus-img" alt="Voorbeeld van de foto">
+        <div id="focus-punt" class="focus-punt"></div>
+      </div>
+    </div>
+    <label>Tekst op de knop in de story
+      <input name="story_oproep" value="{{ vorige.story_oproep if vorige.story_oproep is defined else cfg.story_oproep }}">
+    </label>
+  </section>
+
+  <button type="submit" class="knop">Maak post + story</button>
+</form>
+</main>
+
+<script>
+const SOORTEN = {{ cfg.soorten | tojson }};
+const isBewerken = {{ 'true' if vorige._id else 'false' }};
+const form = document.getElementById('form');
+
+function huidigeSoort() { return form.querySelector('input[name=soort]:checked').value; }
+
+function soortGewijzigd(eersteKeer) {
+  const s = SOORTEN[huidigeSoort()];
+  if (!(eersteKeer && isBewerken)) {
+    document.getElementById('label').value = s.label;
+    document.getElementById('kop').value = s.kop;
+    document.getElementById('lijst_kop').value = s.lijst_kop;
+  }
+  document.getElementById('stemming').style.display = s.stemming ? '' : 'none';
+  document.getElementById('nr-tekst').textContent = s.stemming ? '4' : '3';
+  document.getElementById('nr-foto').textContent = s.stemming ? '5' : '4';
+  document.getElementById('lijst-naam').textContent =
+    s.stemming ? 'Punten van de ' + s.naam.toLowerCase() : (s.lijst_kop ? 'Vragen' : 'Genummerde punten');
+}
+form.querySelectorAll('input[name=soort]').forEach(r => r.addEventListener('change', () => soortGewijzigd(false)));
+
+function telStemmen() {
+  let voor = 0, tegen = 0;
+  form.querySelectorAll('.partijen tbody tr').forEach(tr => {
+    const stem = tr.querySelector('input[type=radio]:checked')?.value || 'niet';
+    tr.querySelector('.stemwaarde').value = stem;
+    const z = parseInt(tr.querySelector('.zetels').value) || 0;
+    if (stem === 'voor') voor += z;
+    if (stem === 'tegen') tegen += z;
+  });
+  const uitslag = document.getElementById('uitslag').value;
+  let tekst = `Voor: ${voor} – Tegen: ${tegen}`;
+  if (voor + tegen > 0) {
+    const verwacht = voor > tegen ? 'aangenomen' : 'verworpen';
+    if ((uitslag === 'Aangenomen' || uitslag === 'Unaniem aangenomen') && verwacht === 'verworpen' ||
+        uitslag === 'Verworpen' && verwacht === 'aangenomen')
+      tekst += `  ⚠ volgens de telling is de motie ${verwacht}`;
+  }
+  document.getElementById('totaal').textContent = tekst;
+}
+form.querySelector('.partijen').addEventListener('input', telStemmen);
+form.querySelector('.partijen').addEventListener('change', telStemmen);
+document.getElementById('uitslag').addEventListener('change', () => {
+  if (document.getElementById('uitslag').value === 'Unaniem aangenomen') {
+    form.querySelectorAll('.partijen tbody tr').forEach(tr => {
+      if (tr.querySelector('input[name=partij_naam]').value.trim())
+        tr.querySelector('input[value=voor]').checked = true;
+    });
+  }
+  telStemmen();
+});
+
+form.addEventListener('submit', () => {
+  telStemmen();
+  const k = form.querySelector('.knop'); k.disabled = true; k.textContent = 'Bezig met maken…';
+});
+// ---- focuspunt op de foto
+const fImg = document.getElementById('focus-img'), fPunt = document.getElementById('focus-punt');
+const fx = document.getElementById('focus_x'), fy = document.getElementById('focus_y');
+function toonPunt() {
+  const x = parseFloat(fx.value || '0.5'), y = parseFloat(fy.value || '0.4');
+  fPunt.style.left = (x * 100) + '%'; fPunt.style.top = (y * 100) + '%';
+}
+function toonFoto(src) {
+  document.getElementById('focus-blok').hidden = !src;
+  if (src) { fImg.src = src; toonPunt(); }
+}
+fImg.addEventListener('click', e => {
+  const r = fImg.getBoundingClientRect();
+  fx.value = ((e.clientX - r.left) / r.width).toFixed(3);
+  fy.value = ((e.clientY - r.top) / r.height).toFixed(3);
+  toonPunt();
+});
+document.getElementById('afbeelding').addEventListener('change', e => {
+  const f = e.target.files[0];
+  fx.value = ''; fy.value = '';
+  toonFoto(f ? URL.createObjectURL(f) : vorigeFoto());
+});
+function vorigeFoto() {
+  const b = document.getElementById('behouden');
+  return (b && b.checked) ? {{ (url_for('bestand', job_id=vorige._id, naam='foto.png') if vorige._heeft_foto else '') | tojson }} : '';
+}
+document.getElementById('behouden')?.addEventListener('change', () => {
+  if (!document.getElementById('afbeelding').files.length) toonFoto(vorigeFoto());
+});
+toonFoto(vorigeFoto());
+
+soortGewijzigd(true);
+telStemmen();
+</script>
+</body>
+</html>

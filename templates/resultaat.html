@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Klaar – {{ invoer.titel }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='stijl.css') }}">
+</head>
+<body>
+<header>
+  <img src="{{ url_for('static', filename='logo.png') }}" alt="Gemeentebelangen">
+  <span>Instagram-generator</span>
+</header>
+<main>
+  <section class="kaart">
+    <h2>{{ invoer.titel }}</h2>
+    <div class="acties">
+      <a class="knop" href="{{ url_for('bestand', job_id=job_id, naam=b.zip, download=1) }}">Alles downloaden (zip)</a>
+      <a class="knop licht" href="{{ url_for('formulier', van=job_id) }}">Aanpassen</a>
+      <a class="knop licht" href="{{ url_for('formulier') }}">Nieuwe post</a>
+    </div>
+  </section>
+
+  <section class="kaart">
+    <h2>Post <small>({{ b.post|length }} slides, 1080×1350)</small></h2>
+    <div class="slides">
+      {% for n in b.post %}
+      <figure>
+        <a href="{{ url_for('bestand', job_id=job_id, naam=n) }}" target="_blank">
+          <img src="{{ url_for('bestand', job_id=job_id, naam=n) }}" alt="Slide {{ loop.index }}" loading="lazy">
+        </a>
+        <figcaption>{{ loop.index }} · <a href="{{ url_for('bestand', job_id=job_id, naam=n, download=1) }}">download</a></figcaption>
+      </figure>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="kaart">
+    <h2>Story <small>(1080×1920)</small></h2>
+    <div class="slides">
+      <figure class="story">
+        <a href="{{ url_for('bestand', job_id=job_id, naam=b.story) }}" target="_blank">
+          <img src="{{ url_for('bestand', job_id=job_id, naam=b.story) }}" alt="Story">
+        </a>
+        <figcaption><a href="{{ url_for('bestand', job_id=job_id, naam=b.story, download=1) }}">download</a></figcaption>
+      </figure>
+    </div>
+  </section>
+</main>
+</body>
+</html>

@@ -1,0 +1,63 @@
+{
+  "partijen": [
+    {"naam": "GB",  "zetels": 1},
+    {"naam": "SGP", "zetels": 7},
+    {"naam": "CDA", "zetels": 3},
+    {"naam": "HVU", "zetels": 3},
+    {"naam": "CU",  "zetels": 2},
+    {"naam": "FVD", "zetels": 1},
+    {"naam": "KU",  "zetels": 1}
+  ],
+
+  "soorten": {
+    "motie": {
+      "naam": "Motie",
+      "label": "Motie",
+      "kop": "Gemeentebelangen\nheeft een motie ingediend:",
+      "lijst_kop": "Verzoekt het college:",
+      "stemming": true,
+      "achtergrond": "golf",
+      "foto_stijl": "onder"
+    },
+    "amendement": {
+      "naam": "Amendement",
+      "label": "Amendement",
+      "kop": "Gemeentebelangen\nheeft een amendement ingediend:",
+      "lijst_kop": "Wij stellen voor:",
+      "stemming": true,
+      "achtergrond": "golf",
+      "foto_stijl": "onder"
+    },
+    "schriftelijke_vragen": {
+      "naam": "Schriftelijke vragen",
+      "label": "Vraag",
+      "kop": "Gemeentebelangen\nheeft vragen gesteld",
+      "lijst_kop": "Vragen:",
+      "stemming": false,
+      "achtergrond": "haven",
+      "foto_stijl": "onder"
+    },
+    "rondvraag": {
+      "naam": "Rondvraag",
+      "label": "Rondvraag",
+      "kop": "Gemeentebelangen\nheeft een rondvraag gesteld",
+      "lijst_kop": "Vragen:",
+      "stemming": false,
+      "achtergrond": "haven",
+      "foto_stijl": "onder"
+    },
+    "algemene_beschouwingen": {
+      "naam": "Algemene beschouwingen",
+      "label": "2027",
+      "kop": "",
+      "lijst_kop": "",
+      "stemming": false,
+      "achtergrond": "haven",
+      "foto_stijl": "achtergrond"
+    }
+  },
+
+  "uitslagen": ["Aangenomen", "Verworpen", "Unaniem aangenomen", "Aangehouden", "Ingetrokken"],
+
+  "story_oproep": "Lees meer in onze nieuwste post"
+}

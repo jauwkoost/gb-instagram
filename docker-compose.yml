@@ -1,0 +1,11 @@
+services:
+  gb-instagram:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - GB_WACHTWOORD=kies-hier-een-wachtwoord
+      - GB_BEWAAR_DAGEN=30
+    volumes:
+      - ./output:/app/output
