@@ -163,7 +163,11 @@ def build_background(size, stijl, foto=None, standaard="haven", focus=None, cont
     if foto is None and standaard == "leeg":
         return bg
     if foto is None:
-        foto = asset("haven.png")
+        # standaard havenfoto: doorzichtige bovenkant eerst op het blauw zetten (anders zwarte rand)
+        hv = asset("haven.png")
+        basis = Image.new("RGBA", hv.size, NAVY_TOP + (255,))
+        basis.alpha_composite(hv)
+        foto = basis.convert("RGB")
         fx, fy = 0.5, 0.6
     foto = ImageOps.exif_transpose(foto).convert("RGB")
 
@@ -180,25 +184,80 @@ def build_background(size, stijl, foto=None, standaard="haven", focus=None, cont
         bg.alpha_composite(top, (0, 0))
         return bg
 
-    # 'onder': foto onderin, bovenkant loopt zacht over in het blauw.
-    ph = int(w * 0.66) if h < 1500 else int(h * 0.45)
-    if content_bottom is not None:
-        room = h - content_bottom + int(ph * 0.12)  # het vervaagde randje mag achter de tekst
-        ph = min(ph, room)
-        if ph < h * 0.24:
-            # Te weinig ruimte onderin (bijv. titelslide met stemtabel).
-            if eigen_foto:
-                # eigen foto dan over de hele slide, doorzichtig blauw getint
-                return build_background(size, "achtergrond", foto, standaard, focus)
-            return build_background(size, stijl, None, standaard if standaard == "golf" else "leeg")
-    p, fpos = focus_crop(foto, w, ph, fx, fy, 0.62)
-    # Het vervaagde deel mag nooit over het focuspunt (de hoofden) heen lopen.
-    fade = max(0.12, min(0.45, fpos - 0.2))
-    p = Image.blend(p, Image.new("RGB", p.size, (14, 40, 95)), 0.2)
-    p = ImageEnhance.Brightness(p).enhance(0.9)
-    p = p.convert("RGBA")
-    p.putalpha(fade_mask(w, ph, fade))
-    bg.alpha_composite(p, (0, h - ph))
+    # 'onder': foto onderin; de bovenkant lost geleidelijk op in het blauw.
+    return foto_onder(bg, foto, (fx, fy), content_bottom, eigen_foto, size, standaard, focus)
+
+
+def smootherstep(t):
+    t = np.clip(t, 0.0, 1.0)
+    return t * t * t * (t * (t * 6 - 15) + 10)
+
+
+def foto_onder(bg, foto, focus, content_bottom, eigen_foto, size, standaard, focus_orig):
+    """
+    Foto onderin de slide.
+    - De foto begint al achter de onderkant van de tekst, maar is daar nog vrijwel
+      onzichtbaar; pas onder de tekst is hij helemaal zichtbaar.
+    - In de overgang wordt de foto eerst naar het blauw van de achtergrond gekleurd en
+      daarna pas doorzichtig. Zo ontstaat geen harde of lichte rand.
+    - Het focuspunt (hoofden) komt midden in het volledig zichtbare deel.
+    """
+    w, h = size
+    fx, fy = focus
+    story = h > 1500
+    ph_std = int(h * 0.45) if story else int(w * 0.62)
+
+    if content_bottom is None:
+        top = h - ph_std
+        helder = top + int(ph_std * 0.55)
+    else:
+        # zichtbaar vanaf net onder de tekst; overgang begint ruim daarboven
+        helder = max(content_bottom + 40, h - ph_std + int(ph_std * 0.5))
+        top = min(h - ph_std, helder - int(h * (0.3 if not story else 0.24)))
+        top = max(top, int(h * 0.12))
+
+    zichtbaar = h - helder
+    if zichtbaar < h * 0.2:
+        # te weinig ruimte onder de tekst
+        if eigen_foto:
+            return build_background(size, "achtergrond", foto, standaard, focus_orig)
+        return build_background(size, "onder", None, standaard if standaard == "golf" else "leeg")
+
+    ph = h - top
+    # hoofden midden in het heldere deel (iets boven het midden oogt natuurlijker)
+    target = ((helder + zichtbaar * 0.42) - top) / ph
+    p, _ = focus_crop(foto, w, ph, fx, fy, target)
+
+    arr = np.asarray(p, dtype=np.float32)
+    ys = np.arange(ph, dtype=np.float32)[:, None]
+    overgang = max(1.0, helder - top)
+    t = smootherstep(ys / overgang)                     # 0 bovenaan, 1 waar de foto helder is
+
+    # kleur van de achtergrond op elke hoogte
+    rows = (top + ys[:, 0]) / (h - 1)
+    navy = (np.array(NAVY_TOP, np.float32)[None, :] * (1 - rows[:, None]) +
+            np.array(NAVY_BOTTOM, np.float32)[None, :] * rows[:, None])[:, None, :]
+
+    # 1) foto in de overgang naar het blauw kleuren (luminantie behouden voor diepte);
+    #    de blauwe gloed loopt ver door in het heldere deel en neemt pas onderin af
+    lum = arr.mean(axis=2, keepdims=True)
+    blauw = navy * (0.5 + 0.95 * lum / 255.0)
+    rest = smootherstep(ys / (overgang * 1.9))
+    kleur_mix = (0.2 + 0.8 * (1 - rest))[..., None]
+    arr = arr * (1 - kleur_mix) + blauw * kleur_mix
+
+    # 2) lichte delen temperen en bovenin donkerder, onderin naar normaal
+    helderheid = (0.76 + 0.16 * smootherstep((ys - overgang * 0.6) / max(1.0, ph - overgang * 0.6)))[..., None]
+    lichte_delen = np.clip((lum - 170) / 85, 0, 1) * 0.18 * (1 - rest[..., None] * 0.6)
+    arr = arr * helderheid * (1 - lichte_delen)
+
+    # 3) doorzichtigheid: lange, zachte overgang (bovenin extra traag)
+    t = smootherstep(ys / overgang) ** 1.35
+    alpha = t * 255
+    alpha = np.broadcast_to(alpha, (ph, w))
+    out = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGB").convert("RGBA")
+    out.putalpha(Image.fromarray(alpha.astype(np.uint8), "L"))
+    bg.alpha_composite(out, (0, top))
     return bg
 
 
@@ -593,7 +652,8 @@ def vote_table_height(data, L, row_h):
     if not data:
         return 0
     rows = max(len(c) for c, _ in vote_columns(data)) if vote_columns(data) else 0
-    return 58 * 1.3 + 40 + rows * row_h
+    hsize = getattr(L, "hsize", 58)
+    return hsize * 1.3 + 40 * hsize / 58 + rows * row_h
 
 
 def draw_vote_table(draw, layer, data, L, y, row_h):
@@ -611,7 +671,7 @@ def draw_vote_table(draw, layer, data, L, y, row_h):
     total = colw * len(cols) + gap * (len(cols) - 1)
     x0 = (L.w - total) / 2
 
-    hsize = 58
+    hsize = getattr(L, "hsize", 58)
     f_head = font("table_bold", hsize)
     gesplitst = len(cols) == 2 and cols[1][1].endswith("_2")
     for ci, (c, kind) in enumerate(cols):
@@ -622,7 +682,7 @@ def draw_vote_table(draw, layer, data, L, y, row_h):
                 draw.text((L.w / 2, y + hsize), kop, font=f_head, fill=WHITE, anchor="ms")
         else:
             draw.text((x + colw / 2, y + hsize), kop, font=f_head, fill=WHITE, anchor="ms")
-        ry = y + hsize * 1.3 + 40
+        ry = y + hsize * 1.3 + 40 * hsize / 58
         for p in c:
             cy = ry + row_h / 2
             draw_icon(layer, int(x), int(cy - icon / 2), icon, kind.startswith("voor"))
@@ -655,11 +715,13 @@ def draw_icon(layer, x, y, d, ok):
 def cover_elements(data, L, story=False):
     """Bouwt de lijst elementen voor de titelslide/story. Elk element: (hoogte, tekenfunctie)."""
     els = []
-    maxh_title = 330 if not story else 420
+    k = 0.8 if data.get("_compact") else 1.0  # compacter als er onderin ruimte voor een foto moet blijven
+    L.hsize = int(58 * k)
+    maxh_title = int((330 if not story else 420) * k)
 
     label = data.get("label", "").strip()
     if label:
-        size = 66 if not story else 72
+        size = int((66 if not story else 72) * k)
         f = font("label", size)
 
         def d_label(draw, layer, y, f=f, size=size):
@@ -670,6 +732,7 @@ def cover_elements(data, L, story=False):
     tsize_max = 84 if not has_vote else 66
     if story:
         tsize_max += 8
+    tsize_max = int(tsize_max * k)
     tsize, tlines = fit_title(data["titel"], 900, tsize_max, 48, 5, maxh_title)
 
     def d_title(draw, layer, y, tsize=tsize, tlines=tlines):
@@ -677,7 +740,7 @@ def cover_elements(data, L, story=False):
         asc = f.getmetrics()[0]
         for i, ln in enumerate(tlines):
             draw_line(draw, ln, L.w / 2, y + asc + i * tsize * 1.08, tsize, "center", "title", "title")
-    els.append((len(tlines) * tsize * 1.08 + 6, d_title, 26))
+    els.append((len(tlines) * tsize * 1.08 + 6, d_title, int(26 * k)))
 
     sub = data.get("ondertitel", "").strip()
     if sub:
@@ -691,20 +754,23 @@ def cover_elements(data, L, story=False):
         els.append((len(lines) * size * 1.35, d_sub, 22))
 
     if data.get("uitslag"):
-        size = 66 if not story else 72
+        size = int((66 if not story else 72) * k)
         f = font("label", size)
         txt = data["uitslag"]
 
         def d_res(draw, layer, y, f=f, size=size, txt=txt):
             draw.text((L.w / 2, y + size * 0.95), txt, font=f, fill=WHITE, anchor="ms")
-        els.append((size * 1.25, d_res, 30))
+        els.append((size * 1.25, d_res, int(30 * k)))
 
     if has_vote:
         rows = max([len(c) for c, _ in vote_columns(data["stemming"])] + [1])
         used = sum(e[0] + e[2] for e in els)
-        limit = (L.h - 70 if not story else 1540) - L.top
-        avail = limit - used - (58 * 1.3 + 40) - 20
-        row_h = max(44, min(95, avail / rows))
+        if data.get("_compact"):
+            limit = int(L.h * (0.75 if not story else 0.6)) - L.top
+        else:
+            limit = (L.h - 70 if not story else 1540) - L.top
+        avail = limit - used - (L.hsize * 1.3 + 40 * k) - 20
+        row_h = max(56 if data.get("_compact") else 44, min(95 * k, avail / rows))
 
         def d_vote(draw, layer, y, row_h=row_h):
             draw_vote_table(draw, layer, data["stemming"], L, y, row_h)
@@ -831,7 +897,8 @@ def build_story(data, bg):
             size = 34
             lines = wrap(teaser, size, 860)
             used = stack_height(els)
-            max_lines = int(max(0, (1420 - L.top - used - 40) // (size * 1.42)))
+            grens = 1130 if data.get("_foto_onder") else 1420
+            max_lines = int(max(0, (grens - L.top - used - 40) // (size * 1.42)))
             max_lines = min(max_lines, 8)
             if max_lines >= 2:
                 if len(lines) > max_lines:
@@ -852,6 +919,8 @@ def build_story(data, bg):
     h = stack_height(els)
     if data.get("toon_stemming"):
         y = L.top
+    elif data.get("_foto_onder"):
+        y = L.top + max(0, (1200 - L.top - h) / 2)
     else:
         y = L.top + max(0, (1450 - L.top - h) / 2)
     draw_stack(draw, layer, els, y)
@@ -864,7 +933,7 @@ def build_story(data, bg):
         tw = f.getlength(oproep)
         pw, ph = tw + 90, 92
         bottom = content_bottom(layer) or 1400
-        x0, y0 = (L.w - pw) / 2, min(1640, bottom + 70)
+        x0, y0 = (L.w - pw) / 2, min(1640, bottom + (50 if data.get("_foto_onder") else 70))
         s = 3
         pill = Image.new("RGBA", (int(pw * s), int(ph * s)), (0, 0, 0, 0))
         ImageDraw.Draw(pill).rounded_rectangle((0, 0, pw * s - 1, ph * s - 1), radius=ph * s / 2,
@@ -901,6 +970,9 @@ def render_all(data, foto=None):
     if foto is not None:
         foto = ImageOps.exif_transpose(foto).convert("RGB")
         foto.thumbnail((2400, 2400))
+    # foto onderin + stemtabel: titelslide compacter, zodat de foto onderin past
+    data["_compact"] = foto is not None and stijl == "onder" and data["toon_stemming"]
+    data["_foto_onder"] = stijl == "onder" and (foto is not None or standaard != "golf")
     cache = {}
 
     def bg(w, h, bottom):
