@@ -10,7 +10,22 @@ altijd in dezelfde opmaak als de huidige Canva-templates: donkerblauw verloop, l
 bovenin, schuin label (*Motie*, *Vraag*, …), grote titel, en onderin de havenfoto,
 de beursgolf of je eigen foto.
 
-## Installeren met Docker (aanbevolen)
+## Installeren op Windows (eenvoudigst)
+
+1. Installeer **Python** via https://www.python.org/downloads/ en vink tijdens de
+   installatie **"Add python.exe to PATH"** aan.
+2. Download dit project: op GitHub **Code → Download ZIP**, en pak de zip uit
+   (bijvoorbeeld naar `C:\gb-instagram`).
+3. Dubbelklik op **`start-windows.bat`**. De eerste keer worden de onderdelen
+   geïnstalleerd (duurt een paar minuten), daarna opent de browser vanzelf op
+   `http://localhost:8080`.
+
+Zolang het zwarte venster open staat, draait het programma. Andere apparaten in hetzelfde
+netwerk kunnen het openen via het adres dat in het venster staat (`http://192.168.x.x:8080`);
+Windows vraagt dan de eerste keer of je dit via de firewall wilt toestaan.
+Een wachtwoord stel je in door in `start-windows.bat` de regel `set GB_WACHTWOORD=` aan te vullen.
+
+## Installeren met Docker (Linux-server)
 
 1. Zet deze map op de server.
 2. Pas in `docker-compose.yml` het wachtwoord aan (`GB_WACHTWOORD`).
@@ -26,7 +41,7 @@ de beursgolf of je eigen foto.
 Voor gebruik via internet zet je er bij voorkeur een reverse proxy met https voor
 (bijv. Caddy, Nginx of Traefik).
 
-## Installeren zonder Docker
+## Installeren zonder Docker (Linux/Mac)
 
 Python 3.10 of nieuwer:
 
@@ -35,10 +50,8 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 export GB_WACHTWOORD=kies-een-wachtwoord
-gunicorn -w 2 -b 0.0.0.0:8080 app:app
+python start.py
 ```
-
-(Even testen kan ook met `python app.py`.)
 
 ## Instellingen
 
